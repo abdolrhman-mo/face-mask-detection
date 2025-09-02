@@ -39,19 +39,24 @@ Each model will be tested on our **test dataset** (992 images) that the models h
 
 ### 3.2 Advanced Metrics
 
-#### **Confusion Matrix**
-- **What it means**: A 2x2 table showing exactly what the model got right/wrong
-- **Structure**:
-  ```
-                  Predicted
-                With  Without
-  Actual With    TP     FN
-         Without FP     TN
-  ```
-- **TP**: True Positive (correctly identified mask)
-- **TN**: True Negative (correctly identified no mask)
-- **FP**: False Positive (said mask when there wasn't one)
-- **FN**: False Negative (missed a mask)
+#### **Confusion Matrix** (Think Like a Report Card)
+Imagine you're a teacher grading a test where students identify "Mask" vs "No Mask":
+
+**Real Example with 100 test images:**
+```
+                    What Model Predicted
+                  Mask    No Mask
+Real Answer Mask   85       5      = 90 people actually had masks
+           No Mask  3       7      = 10 people actually had no masks
+```
+
+**Breaking it down:**
+- **85**: Model correctly said "Mask" when person had mask ✅ (True Positive)
+- **7**: Model correctly said "No Mask" when person had no mask ✅ (True Negative) 
+- **5**: Model missed masks (said "No Mask" but person had mask) ❌ (False Negative)
+- **3**: Model saw masks that weren't there (said "Mask" but no mask) ❌ (False Positive)
+
+**Total Accuracy**: (85 + 7) ÷ 100 = 92%
 
 #### **Precision**
 - **What it means**: "When model says 'mask', how often is it right?"
@@ -68,43 +73,100 @@ Each model will be tested on our **test dataset** (992 images) that the models h
 - **Formula**: 2 × (Precision × Recall) ÷ (Precision + Recall)
 - **Why it matters**: Single number that considers both precision and recall
 
+#### **Classification Report** (The Complete Report Card)
+- **What it is**: A summary table that shows ALL the metrics above for each class
+- **Think of it as**: A detailed report card that shows:
+  - How well the model identifies masks
+  - How well the model identifies no-masks  
+  - Overall performance summary
+- **Example output**:
+  ```
+                precision  recall  f1-score  support
+  WithMask         0.96     0.94     0.95      450
+  WithoutMask      0.95     0.97     0.96      542
+  accuracy                          0.95      992
+  ```
+- **Should you add it?** YES! It's like getting a complete grade report instead of just a final grade
+
 ---
 
-## 4. Evaluation Implementation Plan
+## 4. Evaluation Implementation (Single Phase)
 
-### Phase 1: Basic Performance Testing
-```python
-# Test each model on unseen data
-cnn_results = cnn_model.evaluate(test_ds_cnn)
-mobilenet_results = mobilenet_model.evaluate(test_ds_mobilenet)
-resnet_results = resnet_model.evaluate(test_ds_resnet)
-```
+### Phase 6: Model Evaluation & Comparison
 
-### Phase 2: Detailed Predictions
 ```python
-# Get predictions for detailed analysis
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import classification_report, confusion_matrix
+
+# Step 1: Basic Performance Testing
+print("=== Model Evaluation Results ===\n")
+
+# Evaluate each model
+cnn_loss, cnn_accuracy = cnn_model.evaluate(test_ds_cnn, verbose=0)
+print(f"CNN Test Accuracy: {cnn_accuracy:.4f}")
+
+mobilenet_loss, mobilenet_accuracy = mobilenet_model.evaluate(test_ds_mobilenet, verbose=0)  
+print(f"MobileNetV2 Test Accuracy: {mobilenet_accuracy:.4f}")
+
+resnet_loss, resnet_accuracy = resnet_model.evaluate(test_ds_resnet, verbose=0)
+print(f"ResNet50 Test Accuracy: {resnet_accuracy:.4f}")
+
+# Step 2: Get detailed predictions for analysis
 cnn_predictions = cnn_model.predict(test_ds_cnn)
 mobilenet_predictions = mobilenet_model.predict(test_ds_mobilenet)
 resnet_predictions = resnet_model.predict(test_ds_resnet)
-```
 
-### Phase 3: Classification Reports
-```python
-# Generate detailed metrics for each model
-from sklearn.metrics import classification_report, confusion_matrix
+# Convert predictions to class labels
+cnn_pred_classes = np.argmax(cnn_predictions, axis=1)
+mobilenet_pred_classes = np.argmax(mobilenet_predictions, axis=1)
+resnet_pred_classes = np.argmax(resnet_predictions, axis=1)
 
-# For each model, create:
-# - Confusion matrix
-# - Precision, Recall, F1-score per class
-# - Overall accuracy
-```
+# Get true labels
+true_labels = np.concatenate([y for x, y in test_ds_cnn], axis=0)
 
-### Phase 4: Visualization
-```python
-# Create visual comparisons:
-# - Confusion matrices as heatmaps
-# - Bar charts comparing accuracies
-# - Sample predictions (correct vs incorrect)
+# Step 3: Classification Reports (Complete Report Cards)
+class_names = ['WithMask', 'WithoutMask']
+
+print("\n=== CNN Classification Report ===")
+print(classification_report(true_labels, cnn_pred_classes, target_names=class_names))
+
+print("\n=== MobileNetV2 Classification Report ===") 
+print(classification_report(true_labels, mobilenet_pred_classes, target_names=class_names))
+
+print("\n=== ResNet50 Classification Report ===")
+print(classification_report(true_labels, resnet_pred_classes, target_names=class_names))
+
+# Step 4: Confusion Matrices with Visualization
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+models = ['CNN', 'MobileNetV2', 'ResNet50']
+predictions = [cnn_pred_classes, mobilenet_pred_classes, resnet_pred_classes]
+
+for i, (model, pred) in enumerate(zip(models, predictions)):
+    cm = confusion_matrix(true_labels, pred)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=class_names, yticklabels=class_names, ax=axes[i])
+    axes[i].set_title(f'{model} Confusion Matrix')
+    axes[i].set_xlabel('Predicted')
+    axes[i].set_ylabel('Actual')
+
+plt.tight_layout()
+plt.show()
+
+# Step 5: Model Comparison Summary
+print("\n=== Final Model Comparison ===")
+print(f"{'Model':<12} {'Accuracy':<10} {'Loss':<8}")
+print("-" * 30)
+print(f"{'CNN':<12} {cnn_accuracy:<10.4f} {cnn_loss:<8.4f}")
+print(f"{'MobileNetV2':<12} {mobilenet_accuracy:<10.4f} {mobilenet_loss:<8.4f}")  
+print(f"{'ResNet50':<12} {resnet_accuracy:<10.4f} {resnet_loss:<8.4f}")
+
+# Determine best model
+best_model = max([('CNN', cnn_accuracy), ('MobileNetV2', mobilenet_accuracy), 
+                  ('ResNet50', resnet_accuracy)], key=lambda x: x[1])
+print(f"\n🏆 Best performing model: {best_model[0]} with {best_model[1]:.4f} accuracy")
 ```
 
 ---
